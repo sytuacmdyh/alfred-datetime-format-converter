@@ -3,6 +3,9 @@
 import alfred
 import calendar
 from delorean import utcnow, parse, epoch
+import tzlocal
+
+tz = tzlocal.get_localzone().zone 
 
 def process(query_str):
     """ Entry point """
@@ -14,16 +17,24 @@ def process(query_str):
 
 def parse_query_value(query_str):
     """ Return value for the query string """
+    global tz
     try:
         query_str = str(query_str).strip('"\' ')
         if query_str == 'now':
-            d = utcnow()
+            d = utcnow().shift(tz)
+        elif 'now' in query_str and '@' in query_str:
+            tz = query_str.split('@')[1].strip()
+            d = utcnow().shift(tz)
         else:
             # Parse datetime string or timestamp
+            if '@' in query_str:
+                datas = query_str.split('@')
+                query_str = datas[0].strip()
+                tz = datas[1].strip()
             try:
-                d = epoch(float(query_str))
+                d = epoch(float(query_str)).shift(tz)
             except ValueError:
-                d = parse(str(query_str))
+                d = parse(str(query_str)).shift(tz)
     except (TypeError, ValueError):
         d = None
     return d
@@ -33,6 +44,7 @@ def alfred_items_for_value(value):
     Given a delorean datetime object, return a list of
     alfred items for each of the results
     """
+    global tz
 
     index = 0
     results = []
@@ -41,7 +53,7 @@ def alfred_items_for_value(value):
     item_value = calendar.timegm(value.datetime.utctimetuple())
     results.append(alfred.Item(
         title=str(item_value),
-        subtitle=u'UTC Timestamp',
+        subtitle=tz + u' Timestamp',
         attributes={
             'uid': alfred.uid(index), 
             'arg': item_value,
@@ -52,6 +64,8 @@ def alfred_items_for_value(value):
 
     # Various formats
     formats = [
+        # 1937-01-01 
+        ("%Y-%m-%d", ''),
         # 1937-01-01 12:00:27
         ("%Y-%m-%d %H:%M:%S", ''),
         # 19 May 2002 15:21:36
